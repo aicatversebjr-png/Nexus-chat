@@ -1,0 +1,181 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { Chat, User } from '../types';
+import { Search, MessageSquarePlus, LogOut, MoreVertical, User as UserIcon, Settings, Ghost } from 'lucide-react';
+import { formatTime, cn } from '../lib/utils';
+import { motion, AnimatePresence } from 'motion/react';
+
+interface SidebarProps {
+  chats: Chat[];
+  activeChatId?: number;
+  onChatSelect: (chat: Chat) => void;
+  onUserSelect: (user: User) => void;
+}
+
+export default function Sidebar({ chats, activeChatId, onChatSelect, onUserSelect }: SidebarProps) {
+  const { user, logout, token } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (searchQuery.trim()) {
+        performSearch();
+      } else {
+        setSearchResults([]);
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery]);
+
+  const performSearch = async () => {
+    setIsSearching(true);
+    try {
+      const res = await fetch(`/api/users/search?q=${searchQuery}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setSearchResults(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  return (
+    <aside className="w-80 md:w-96 border-r border-slate-200 dark:border-slate-800 flex flex-col bg-white dark:bg-slate-950">
+      {/* Header */}
+      <div className="p-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-900 bg-slate-50/50 dark:bg-slate-900/10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold ring-2 ring-slate-100 dark:ring-slate-800">
+            {user?.username[0].toUpperCase()}
+          </div>
+          <div>
+            <h3 className="font-semibold text-sm leading-tight">{user?.username}</h3>
+            <span className="text-xs text-emerald-500 font-medium">Online</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+            <MessageSquarePlus size={20} />
+          </button>
+          <button onClick={logout} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full transition-colors">
+            <LogOut size={20} />
+          </button>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="p-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+            type="text"
+            placeholder="Search or start new chat"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-900 border-none rounded-xl focus:ring-2 focus:ring-emerald-500/50 transition-all outline-none text-sm"
+          />
+        </div>
+      </div>
+
+      {/* List Area */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        <AnimatePresence mode="wait">
+          {searchQuery ? (
+            <motion.div
+              key="search-results"
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 10 }}
+              className="p-2 space-y-1"
+            >
+              <h4 className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Search Results</h4>
+              {searchResults.length > 0 ? (
+                searchResults.map((u) => (
+                  <button
+                    key={u.id}
+                    onClick={() => {
+                      onUserSelect(u);
+                      setSearchQuery('');
+                    }}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-2xl transition-colors text-left"
+                  >
+                    <div className="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
+                      <UserIcon size={24} className="text-slate-400" />
+                    </div>
+                    <span className="font-medium">{u.username}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="py-8 text-center text-slate-400 dark:text-slate-600">
+                  <Ghost className="mx-auto mb-2 opacity-20" size={48} />
+                  <p className="text-sm">No users found</p>
+                </div>
+              )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="chat-list"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="divide-y divide-slate-100 dark:divide-slate-900"
+            >
+              {chats.length > 0 ? (
+                chats.map((chat) => {
+                  const otherUser = chat.participants.find(p => p.id !== user?.id);
+                  return (
+                    <button
+                      key={chat.id}
+                      onClick={() => onChatSelect(chat)}
+                      className={cn(
+                        "w-full flex items-center gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-900 transition-all text-left border-l-4",
+                        activeChatId === chat.id 
+                          ? "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-500" 
+                          : "border-transparent"
+                      )}
+                    >
+                      <div className="relative flex-shrink-0">
+                        <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold overflow-hidden">
+                          {otherUser?.avatar_url ? (
+                            <img src={otherUser.avatar_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            otherUser?.username[0].toUpperCase()
+                          )}
+                        </div>
+                        {otherUser?.is_online && (
+                          <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-slate-950 rounded-full" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <h4 className="font-semibold text-sm truncate">{otherUser?.username || 'Group Chat'}</h4>
+                          {chat.last_message_time && (
+                            <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                              {formatTime(chat.last_message_time)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate line-clamp-1">
+                          {chat.last_message || 'Start a conversation'}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="p-8 text-center text-slate-400 dark:text-slate-600">
+                  <p className="text-sm">No chats found. Search for a friend to start chatting!</p>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </aside>
+  );
+}
